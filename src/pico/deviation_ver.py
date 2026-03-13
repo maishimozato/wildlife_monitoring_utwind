@@ -41,8 +41,12 @@ while True:                                                         # infinite l
 
     level = count / samples                                         # fraction of ones {6}
 
-    deviation = abs(level - 0.5)
-    print("level:", level, " deviation:", deviation)
+    deviation = abs(level - 0.5)*800
+    bars = int(deviation)
+    
+    
+    #print("level:", level, " deviation:", deviation)
+    print(bars*"#")
     
     time.sleep(0.2)
 
