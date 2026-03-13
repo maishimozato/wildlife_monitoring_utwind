@@ -1,10 +1,5 @@
 """
-code to test if microphone works (part 2)
-
-[x] = links/references
-{x} = explanations
-
-see end of file for more!!
+deviation??
 """
 
 import rp2
