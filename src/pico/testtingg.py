@@ -25,7 +25,7 @@ def pdm_clock():                                                    # will gener
     wrap_target()                                                   # starts a loop
     set(pins, 1)                                                    # clkpin high, {3}
     set(pins, 0)                                                    # clkpin low, {3}
-    wrap()                                                          # returns to line 23, loop!
+    wrap()                                                          # returns to line 25, loop!
 
 # ??? 
 sm = rp2.StateMachine(0, pdm_clock, freq=2000000, set_base=clk)     # creates a pio state machine to run pio program, see {4}, {5}
