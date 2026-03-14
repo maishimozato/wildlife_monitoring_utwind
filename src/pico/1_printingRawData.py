@@ -1,10 +1,5 @@
 """
-code to test if microphone works
-
-[x] = links/references
-{x} = explanations
-
-see end of file for more!!
+code prints 0s and 1s
 """
 
 import rp2                                                          # import RP2040 PIO library!!, [1]

@@ -10,6 +10,7 @@ see end of file for more!!
 import rp2                                                          # import RP2040 PIO library!!, [1]
 from machine import Pin                                             # to control gpio pins on the pico             
 import time                                                         # we need time funcitons so...
+import math                                                         # bc i use log at the end
 
 # pins, numbers 2 and 3 represent the pin no. where the mics clock and data are connected
 PDM_CLK = 2                                                         # declared as variables for debugging(?) purposes                                
@@ -40,15 +41,13 @@ while True:                                                         # infinite l
         count += data.value()                                       # reads digital value on the data pin (0 or 1), then adds it, {6}
 
     level = count / samples                                         # fraction of ones {6}
+    fakeamplitude = abs(level - 0.5) 
+    ref = 0.00001
+    db = 20 * math.log10(fakeamplitude/ref)
 
-    deviation = abs(level - 0.5)*800
-    bars = int(deviation)
-    
-    
-    #print("level:", level, " deviation:", deviation)
-    print(bars*"#")
-    
-    time.sleep(0.2)
+    #print("Sound level:", level)                                    # displays the result so that we can see if the mic even responds to sound
+    print(db)
+    time.sleep(0.2)                                                 # waits 0.2secs, so that we can actually read the output
 
 
 """
