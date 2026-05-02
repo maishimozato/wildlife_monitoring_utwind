@@ -36,8 +36,17 @@ def pdm_bit_capture():
 
 
 def _popcount_u32(x):
+<<<<<<< HEAD
     # MicroPython 1.19+: int.bit_count
     return x.bit_count()
+=======
+    # SWAR popcount (no int.bit_count — many MicroPython UF2s omit it).
+    x &= 0xFFFFFFFF
+    x = x - ((x >> 1) & 0x55555555)
+    x = (x & 0x33333333) + ((x >> 2) & 0x33333333)
+    x = (x + (x >> 4)) & 0x0F0F0F0F
+    return ((x * 0x01010101) & 0xFFFFFFFF) >> 24
+>>>>>>> 7479d8e (fixing up mic readback:)
 
 
 # Do not configure CLK as Pin.OUT; PIO must own that pin. DATA stays a normal input.
