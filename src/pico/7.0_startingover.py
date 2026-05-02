@@ -7,7 +7,6 @@
 # Output is a practical loudness proxy (high-passed bit density), not broadcast PCM.
 # For real audio, use a C SDK / OpenPDM2PCM-style pipeline or a firmware with PDM RX.
 
-import math
 import time
 
 import rp2
@@ -15,6 +14,9 @@ from machine import Pin
 
 PDM_CLK_GPIO = 2
 PDM_DATA_GPIO = 3
+
+# Maps high-passed |density - dc| into 0..100 (not dB SPL). Raise if too quiet; lower if it pegs at 100 often.
+_LOUDNESS_SCALE = 800.0
 
 # Datasheet "standard performance" PDM clock on CLK pin: ~1.024–2.475 MHz (often 2.4 MHz).
 # This PIO program runs 3 SM cycles per full CLK cycle: in_(sample), set high, set low.
@@ -58,7 +60,7 @@ _sm.active(1)
 
 
 def drain_pdm_bitcount(n_words):
-    """Pull n_words 32-bit words from PIO; return (ones_count, total_bits). No big list."""
+    """Pull n_words 32-bit words from PIO; return (ones_count, total_bits)."""
     ones = 0
     for _ in range(n_words):
         while _sm.rx_fifo() == 0:
@@ -82,17 +84,9 @@ def main():
         ac = density - dc
         # Cheap loudness proxy (not SPL); log avoids -inf when perfectly quiet.
         level = abs(ac)
-        db = 20.0 * math.log10(level + 1e-9)
+        loudness = int(min(100, round(level * _LOUDNESS_SCALE)))
 
-        print(
-            "PDM_clk~{}MHz density={:.4f} hp={:.5f} level={:.5f} dB_est={:.1f}".format(
-                _PDM_CLK_HZ / 1e6,
-                density,
-                ac,
-                level,
-                db,
-            )
-        )
+        print("density={:.4f}  loudness={}/100".format(density, loudness))
         time.sleep_ms(200)
 
 
