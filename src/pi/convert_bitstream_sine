@@ -1,0 +1,37 @@
+#input values:
+bits = "0101011011110111111111111111111111011111101101101010100100100000010000000000000000000001000010010101"
+#^ example
+
+#for real values, decimation = 64 → gives ~15.6 kHz sample rate.
+
+def pdm_to_pcm(bitstring, decimation=64):
+    """Count 1s in each window to get amplitude samples."""
+    pcm = []
+    for i in range(0, len(bitstring) - decimation, decimation):
+        window = bitstring[i : i + decimation]
+        sample = window.count('1') - (decimation // 2)  # center around 0
+        pcm.append(sample)
+    return pcm
+
+pcm = pdm_to_pcm(bits, decimation=8)
+print(pcm)
+#      ▲ rising          ▲ peak                   ▼ trough
+
+
+import matplotlib.pyplot as plt
+
+plt.plot(pcm, 'o-')
+plt.axhline(0, color='gray', linestyle='--')
+plt.title("Reconstructed waveform from PDM bitstream")
+plt.xlabel("Sample")
+plt.ylabel("Amplitude")
+plt.show()
+
+
+
+
+raw_data_pts = [0.4487,0.5072,0.5041,0.494,0.5099,0.5008,0.4979,0.4969,0.4946,0.5034,0.4998,0.4989,0.49,0.5033,0.5002,0.4983,0.4955,0.5006,0.4953,0.4952,0.5008,0.4995,0.5035,0.4973,0.4968,0.5003,0.502,0.4993,0.5069,0.5027,0.4912,0.5038,0.4998,0.5061,0.4881,0.4985,0.5025,0.4951,0.5009,0.507,0.5085,0.5065,0.5022,0.4963,0.5069,0.4938,0.5069,0.5084,0.5029,0.4995,0.5023,0.4967,0.4934,0.5066,0.4997,0.4937,0.4982,0.5018,0.4967,0.4984,0.4904,0.4917,0.498,0.5028,0.5012,0.5034,0.5028,0.4955,0.5028,0.5027,0.4992,0.4977,0.5045,0.4968,0.5055,0.5015,0.4924,0.5024,0.5016,0.4935,0.4961,0.4999,0.4908,0.5097,0.5025,0.4922,0.4963,0.4924,0.4934,0.4961,0.5034,0.5082,0.4995,0.497,0.5038,0.5057,0.5027,0.5097,0.5017,0.4987
+]
+example_raw_pts = 101011011110111111111111111111111011111101101101010100100100000010000000000000000000001000010010101
+
+
