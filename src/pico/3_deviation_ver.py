@@ -27,23 +27,36 @@ sm = rp2.StateMachine(0, pdm_clock, freq=2000000, set_base=clk)     # creates a 
 sm.active(1)                                                        # turns the machine on
 
 # simple sound level detector
-while True:                                                         # infinite loop!!
-    count = 0                                                       # counter variable
-    samples = 10000
+levels = []                                                         # remember every level value, so we can save them at the end, see {7}
+LEVELS_FILE = "/levels.txt"                                         # where to dump the recording on the Pico's flash, {8}
 
-    for _ in range(samples):                                        # loops 10000 times
-        count += data.value()                                       # reads digital value on the data pin (0 or 1), then adds it, {6}
+try:
+    while True:                                                     # infinite loop!! (Ctrl+C to stop)
+        count = 0                                                   # counter variable
+        samples = 10000
 
-    level = count / samples                                         # fraction of ones {6}
+        for _ in range(samples):                                    # loops 10000 times
+            count += data.value()                                   # reads digital value on the data pin (0 or 1), then adds it, {6}
 
-    deviation = abs(level - 0.5)*800
-    bars = int(deviation)
-    
-    
-    #print("level:", level, " deviation:", deviation)
-    print(bars*"#")
-    
-    time.sleep(0.2)
+        level = count / samples                                     # fraction of ones {6}
+        levels.append(level)                                        # remember it for later plotting
+
+        deviation = abs(level - 0.5)*800
+        bars = int(deviation)
+
+        #print("level:", level, " deviation:", deviation)
+        print(bars*"#")
+
+        time.sleep(0.2)
+
+except KeyboardInterrupt:
+    # Save every level we collected to a file on the Pico, one float per line.
+    # The Pico cannot plot (no matplotlib), so we save and plot on the laptop later. {9}
+    print("\n[stopping] saving", len(levels), "levels to", LEVELS_FILE)
+    with open(LEVELS_FILE, "w") as f:
+        for v in levels:
+            f.write("{}\n".format(v))
+    print("[done] copy it off with:  mpremote cp :levels.txt .")
 
 
 """
@@ -69,4 +82,11 @@ EXPLANATIONS
 {5}     execution freq = 2MHz, loop has 2 instructions → clock frequency = 1MHz
 {6}     counts how many 1 bits happened in sample window, for example:
         samples = 10000, count = 5000 → ones 50% of the time
+{7}     each loop appends one float to `levels`. After many loops you have a
+        time-series of "fraction of 1 bits per window" -> good enough to plot a
+        slow envelope of activity (NOT the audio waveform itself).
+{8}     /levels.txt is on the Pico's internal flash filesystem. Survives reset.
+        Get it back with:   mpremote cp :levels.txt .
+{9}     MicroPython on Pico has no matplotlib / no GUI. Plotting must happen on
+        a normal computer. So: collect on Pico, save file, copy off, plot on laptop.
 """
