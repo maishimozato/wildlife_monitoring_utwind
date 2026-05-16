@@ -1,13 +1,13 @@
 # wildlife_monitoring_utwind
 
-Subproject for UTWind to 
+Subproject for UTWind Sustainability Team
 
-Goal:
+Goal of project:
 reduce/prevent bat collisions and mortality with turbine
-rip them bats
+"rip them bats" - Mai
 
 Description:
 Hardware used:
 -raspberry pi
 -raspberry pico
--microphone(type)
+-PDM microphone
