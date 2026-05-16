@@ -1,5 +1,6 @@
 #input values:
-
+bits = "0101011011110111111111111111111111011111101101101010100100100000010000000000000000000001000010010101"
+print(len(bits))
 def input_bits(input = None):
     if input == None:
         bits = "0101011011110111111111111111111111011111101101101010100100100000010000000000000000000001000010010101"
@@ -21,7 +22,7 @@ def input_bits(input = None):
 
 #for real values, decimation = 64 → gives ~15.6 kHz sample rate.
 
-def pdm_to_pcm(bitstring, decimation=64):
+def pdm_to_pcm(bitstring, decimation=16):
     """Count 1s in each window to get amplitude samples."""
     pcm = []
     for i in range(0, len(bitstring) - decimation, decimation):
@@ -30,7 +31,7 @@ def pdm_to_pcm(bitstring, decimation=64):
         pcm.append(sample)
     return pcm
 
-pcm = pdm_to_pcm(input_bits(), decimation=8)
+pcm = pdm_to_pcm(input_bits("hi"), decimation=8)
 print(pcm)
 #      ▲ rising          ▲ peak                   ▼ trough
 
