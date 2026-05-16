@@ -1,5 +1,22 @@
 #input values:
-bits = "0101011011110111111111111111111111011111101101101010100100100000010000000000000000000001000010010101"
+
+def input_bits(input = None):
+    if input == None:
+        bits = "0101011011110111111111111111111111011111101101101010100100100000010000000000000000000001000010010101"
+        return bits
+    else:
+        file_path = r'C:\Users\Yuech\Downloads\wildlife_monitoring_utwind\src\pi\\raw.txt'
+        bitstring = ""
+
+        with open(file_path, 'r') as file:
+            for line in file:
+                try:
+                # Try to convert the line to a float and add it to the list
+                    bitstring += (str(line.strip()))
+                except ValueError:
+            # Skip lines that are text or cannot be converted to a float
+                    continue
+        return bitstring
 #^ example
 
 #for real values, decimation = 64 → gives ~15.6 kHz sample rate.
@@ -13,7 +30,7 @@ def pdm_to_pcm(bitstring, decimation=64):
         pcm.append(sample)
     return pcm
 
-pcm = pdm_to_pcm(bits, decimation=8)
+pcm = pdm_to_pcm(input_bits(), decimation=8)
 print(pcm)
 #      ▲ rising          ▲ peak                   ▼ trough
 
