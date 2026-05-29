@@ -1,10 +1,11 @@
 """
-checks deviation from 0.5
+code prints 0s and 1s
 """
-www
+
 import rp2                                                          # import RP2040 PIO library!!, [1]
 from machine import Pin                                             # to control gpio pins on the pico             
 import time                                                         # we need time funcitons so...
+import math                                                         # bc i use log at the end
 
 # pins, numbers 2 and 3 represent the pin no. where the mics clock and data are connected
 PDM_CLK = 2                                                         # declared as variables for debugging(?) purposes                                
@@ -23,7 +24,7 @@ def pdm_clock():                                                    # will gener
     wrap()                                                          # returns to line 25, loop!
 
 # ??? 
-sm = rp2.StateMachine(0, pdm_clock, freq=2000000, set_base=clk)     # creates a pio state machine to run pio program, see {4}, {5}
+sm = rp2.StateMachine(0, pdm_clock, freq=4000000, set_base=clk)     # creates a pio state machine to run pio program, see {4}, {5}
 sm.active(1)                                                        # turns the machine on
 
 # simple sound level detector
@@ -33,17 +34,16 @@ while True:                                                         # infinite l
 
     for _ in range(samples):                                        # loops 10000 times
         count += data.value()                                       # reads digital value on the data pin (0 or 1), then adds it, {6}
+    
+    
+    
+    ratio = count / samples          # fraction of 1s (0.0 to 1.0)
+    db = 20 * math.log10(ratio + 1e-9)   # rough dB estimate, +tiny number avoids log(0)
+    print(f"ratio={ratio:.3f}  dB={db:.1f}")
 
-    level = count / samples                                         # fraction of ones {6}
 
-    deviation = abs(level - 0.5)*800
-    bars = int(deviation)
     
-    
-    #print("level:", level, " deviation:", deviation)
-    print(bars*"#")
-    
-    time.sleep(0.2)
+    time.sleep(0.2)                                                 # waits 0.2secs, so that we can actually read the output
 
 
 """

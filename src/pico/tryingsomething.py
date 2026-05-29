@@ -19,7 +19,7 @@ sm = rp2.StateMachine(0, pdm_clock, freq=2000000, set_base=clk)
 sm.active(1)
 
 WINDOW = 64          # PDM bits per PCM sample
-PCM_SAMPLES = 400    # total PCM samples
+PCM_SAMPLES = 400    # total PCM samples, temporary
 
 while True:
 
@@ -37,7 +37,7 @@ while True:
 
         pcm.append(sample)
 
-    # Zero crossing frequency estimate
+    # zero crossing frequency ESTIMATEEEE
     crossings = 0
 
     for i in range(1, len(pcm)):

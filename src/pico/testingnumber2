@@ -1,0 +1,47 @@
+import rp2
+from machine import Pin
+import time
+
+PDM_CLK  = 2
+PDM_DATA = 3
+
+clk  = Pin(PDM_CLK,  Pin.OUT)
+data = Pin(PDM_DATA, Pin.IN)
+
+@rp2.asm_pio(set_init=rp2.PIO.OUT_LOW)
+def pdm_clock():
+    wrap_target()
+    set(pins, 1)
+    set(pins, 0)
+    wrap()
+
+# SELECT=GND → this mic outputs on the FALLING edge
+@rp2.asm_pio(in_shiftdir=rp2.PIO.SHIFT_LEFT, autopush=True, push_thresh=32)
+def pdm_capture():
+    wrap_target()
+    wait(0, gpio, 2)     # wait for CLK to go LOW (falling edge)
+    in_(pins, 1)         # sample DATA
+    wait(1, gpio, 2)     # wait for CLK to go HIGH before next loop
+    wrap()
+
+sm_clk = rp2.StateMachine(0, pdm_clock,
+                           freq=2_000_000,
+                           set_base=clk)
+
+sm_rx  = rp2.StateMachine(1, pdm_capture,
+                           freq=2_000_000,
+                           in_base=data)
+
+sm_clk.active(1)
+time.sleep(0.1)
+sm_rx.active(1)
+
+WINDOW = 8   # 256 bits per reading, fast enough to catch transients
+
+while True:
+    total = 0
+    for _ in range(WINDOW):
+        word = sm_rx.get()
+        total += bin(word).count('1')
+    ratio = total / (WINDOW * 32)
+    print(ratio)
