@@ -2,7 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-filename = "/Users/tasneemsalek/Downloads/wildlife_monitoring_utwind/src/pico/raww.txt"  
+filename = "/Users/tasneemsalek/Downloads/wildlife_monitoring_utwind/src/pi/levels.txt"  
 Fs = 2000000               # sampling rate in Hz, {NEEDS TO BE CHANGEDDDDDD}
 
 # one number per line
