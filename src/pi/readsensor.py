@@ -4,15 +4,14 @@ import serial
 
 ser = serial.Serial("/dev/serial0", 115200, timeout=1)
 
-object_dectected = False
 while True:
     if ser.read() == b'\x59' and ser.read() == b'\x59':
         frame = ser.read(7)
         dist = frame[0] + frame[1]*256
         strength = frame[2] + frame[3]*256
         print(f"Distance: {dist} cm | Strength: {strength}")
-        if dist < 500:  # Example threshold for bat detection
-            object_dectected = True
+        if dist < 100:  # Example threshold for bat detection
+            print("Object detected! Beeping...")
 
 
 """
