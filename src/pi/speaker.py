@@ -1,13 +1,17 @@
 import time
-import RPi.GPIO as GPIO
+import gpiod
 import serial
 
 # Use the physical pin numbering or BCM numbering
 # Pin 12 on the board corresponds to BCM GPIO 18
 BEEP_PIN = 18 
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(BEEP_PIN, GPIO.OUT)
+chip = gpiod.Chip('gpiochip0')
+line = chip.get_line(BEEP_PIN)
+
+# Configure the pin as an output
+config = gpiod.LineRequest(consumer='speaker_beep', type=gpiod.LineRequest.DIRECTION_OUTPUT)
+line.request(config)
 
 def trigger_beep(duration=0.2, frequency=1000):
     """
@@ -20,9 +24,9 @@ def trigger_beep(duration=0.2, frequency=1000):
     cycles = int(duration * frequency)
     
     for _ in range(cycles):
-        GPIO.output(BEEP_PIN, GPIO.HIGH)
+        line.set_value(1) # HIGH
         time.sleep(delay)
-        GPIO.output(BEEP_PIN, GPIO.LOW)
+        line.set_value(0) # LOW
         time.sleep(delay)
 
 try:
@@ -46,5 +50,5 @@ try:
         #time.sleep(3)
 
 except KeyboardInterrupt:
-    print("\nCleaning up GPIO pins...")
-    GPIO.cleanup()
+    print("\nReleasing GPIO pin...")
+    line.release()
