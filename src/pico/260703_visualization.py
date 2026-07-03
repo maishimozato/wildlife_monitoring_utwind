@@ -1,3 +1,4 @@
+#basically checks ic mic works
 import rp2                       # rp2 module lets us control the RP2040's special PIO hardware (programmable I/O)
 from rp2 import PIO, asm_pio     # PIO = settings/constants for the PIO hardware, asm_pio = decorator to write tiny PIO "assembly" programs
 from machine import Pin          # Pin lets us control individual GPIO pins on the board
