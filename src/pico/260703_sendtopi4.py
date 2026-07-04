@@ -96,17 +96,30 @@ def _irq_handler(which):
 dma[0].irq(handler=_irq_handler(0))   # register the handler for channel 0's completion interrupt
 dma[1].irq(handler=_irq_handler(1))   # register the handler for channel 1's completion interrupt
 
-def _arm(chan_idx):
+def _arm(chan_idx, initial=False):
+    # FIX: `trigger` must only ever be True for the ONE-TIME startup kick of channel 0.
+    # Previously this was `trigger=(chan_idx == 0)`, which re-triggered channel 0 by
+    # software EVERY time it was re-armed in the steady-state loop below - including
+    # at the same moment channel 0's own `chain_to` had already auto-started channel 1
+    # in hardware. That put both DMA channels racing to drain the same PIO RX FIFO at
+    # once, corrupting/stalling the capture so the CIC filter kept seeing a frozen
+    # (effectively all-zero) bitstream - which is exactly why the PCM output was a
+    # constant value (-16) on the Pi instead of real audio.
+    #
+    # Now: only the very first call (`initial=True`) is allowed to trigger anything by
+    # software. After that, each channel's own hardware `chain_to` is solely responsible
+    # for re-starting it once the other channel finishes - `_arm()` just resets the
+    # buffer/count/ctrl for the *next* fill, without touching the trigger.
     dma[chan_idx].config(
-        read=RXF_ADDR,                   # always read from the PIO's RX FIFO register
-        write=raw_buf[chan_idx],         # write into this channel's buffer
-        count=WORDS_PER_BUF,             # transfer this many words, then stop (and fire the IRQ)
-        ctrl=_make_ctrl(chan_idx),       # apply the control settings built above
-        trigger=(chan_idx == 0),         # only start channel 0 immediately; channel 1 waits to be chained in
+        read=RXF_ADDR,                        # always read from the PIO's RX FIFO register
+        write=raw_buf[chan_idx],              # write into this channel's buffer
+        count=WORDS_PER_BUF,                  # transfer this many words, then stop (and fire the IRQ)
+        ctrl=_make_ctrl(chan_idx),            # apply the control settings built above
+        trigger=(initial and chan_idx == 0),  # true ONCE at startup, for channel 0 only
     )
 
-_arm(0)     # configure and immediately start channel 0 filling raw_buf[0]
-_arm(1)     # configure channel 1 (armed but not triggered yet - it starts via chain_to once channel 0 finishes)
+_arm(0, initial=True)   # configure AND start channel 0 filling raw_buf[0] (one-time kickoff)
+_arm(1, initial=True)   # configure channel 1 (armed but not triggered - starts via chain_to once channel 0 finishes)
 
 sm.active(1)
 # turns the PIO state machine on: the clock starts pulsing and bits start flowing into the DMA chain
@@ -196,8 +209,9 @@ while True:                                # run forever
             buf_ready[idx] = False            # clear the flag immediately so we don't process it twice
             n_samples = cic_process(raw_buf[idx], WORDS_PER_BUF, cic_state, pcm_out)
             # run the CIC filter over the raw bits in this buffer, producing PCM samples in pcm_out
-            # re-arm this DMA channel for the next fill of this buffer
-            _arm(idx)                          # restart this DMA channel so it's ready to capture again
+            # re-arm this DMA channel for the next fill of this buffer (does NOT re-trigger;
+            # the other channel's chain_to is what restarts this one - see _arm() comments above)
+            _arm(idx)                          # reset this DMA channel so it's ready to capture again
             usb.write(memoryview(pcm_out)[: n_samples * 2])
             # write only the valid portion of pcm_out out over USB, as raw bytes.
             # `n_samples * 2` because each 16-bit sample is 2 bytes; memoryview avoids copying the data.
