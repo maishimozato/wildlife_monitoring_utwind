@@ -1,9 +1,34 @@
 import time
 import os
+import glob
 import serial
 
 # Pin 12 on the board corresponds to BCM GPIO 18
-PIN_NUM = "18"
+PIN_BCM = 18
+
+
+def _sysfs_pin_number(bcm):
+    """
+    On kernel 6.6+ the sysfs GPIO chip base moved off zero (Pi 4 uses base 512),
+    so the sysfs pin number = base + BCM number. Older kernels had base=0 and
+    the BCM number was used directly. This function figures it out at runtime
+    by reading /sys/class/gpio/gpiochip*/label and /base.
+    """
+    for chip in glob.glob("/sys/class/gpio/gpiochip*"):
+        try:
+            with open(f"{chip}/label") as f:
+                label = f.read().strip().lower()
+            with open(f"{chip}/base") as f:
+                base = int(f.read().strip())
+        except OSError:
+            continue
+        # main SoC GPIO chip is labeled like 'pinctrl-bcm2711' (Pi 4) / 'pinctrl-bcm2835'
+        if "pinctrl" in label or "bcm" in label:
+            return base + bcm
+    return bcm  # fallback: old kernels where base was 0
+
+
+PIN_NUM = str(_sysfs_pin_number(PIN_BCM))
 SYSFS_PATH = f"/sys/class/gpio/gpio{PIN_NUM}"
 
 def setup_gpio():
@@ -32,12 +57,12 @@ def trigger_beep(duration=0.15, frequency=1200):
     delay = period / 2.0
     cycles = int(duration * frequency)
     
-    # Open the direct file value controller
-    with open(f"{SYSFS_PATH}/value", "w", buffering=0) as f:
+    # Open in BINARY unbuffered mode. Python 3.13 forbids buffering=0 in text mode.
+    with open(f"{SYSFS_PATH}/value", "wb", buffering=0) as f:
         for _ in range(cycles):
-            f.write("1") # Pin HIGH
+            f.write(b"1")  # Pin HIGH
             time.sleep(delay)
-            f.write("0") # Pin LOW
+            f.write(b"0")  # Pin LOW
             time.sleep(delay)
 
 def cleanup_gpio():
