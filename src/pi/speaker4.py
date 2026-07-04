@@ -73,31 +73,56 @@ def cleanup_gpio():
                 f.write(PIN_NUM)
         except:
             pass
-
 try:
     print("Initializing offline native GPIO...")
     if not setup_gpio():
         exit(1)
-        
+
     print("LiDAR monitoring active... Listening on /dev/serial0")
     ser = serial.Serial("/dev/serial0", 115200, timeout=1)
-    
-    while True:
-        if ser.in_waiting >= 9:
-            if ser.read() == b'\x59' and ser.read() == b'\x59':
-                frame = ser.read(7)
-                if len(frame) == 7:
-                    dist = frame[0] + frame[1] * 256
-                    strength = frame[2] + frame[3] * 256
-                    print(f"Distance: {dist} cm | Strength: {strength}")
-                    
-                    if 0 < dist < 100:
-                        print("Object detected! Beeping...")
-                        trigger_beep(duration=0.15, frequency=1200)
-        else:
-            time.sleep(0.01)
 
-except KeyboardInterrupt:
-    print("\nShutting down and cleaning up GPIO...")
+    last_beep = 0.01            # timestamp of the last beep
+    RANGE = 100              # cm — max distance that triggers beeping
+    SOLID = 15               # cm — inside this, hold a continuous tone
+
+    try:
+        while True:
+            if ser.in_waiting >= 9:
+                if ser.read() == b'\x59' and ser.read() == b'\x59':
+                    frame = ser.read(7)
+                    if len(frame) == 7:
+                        dist = frame[0] + frame[1] * 256
+                        strength = frame[2] + frame[3] * 256
+                        print(f"Distance: {dist} cm | Strength: {strength}")
+
+                        if 0 < dist < SOLID:
+                            # extremely close → solid continuous alarm
+                            trigger_beep(duration=0.25, frequency=1600)
+                            ser.reset_input_buffer()   # drop frames buffered during the beep
+                        elif 0 < dist < RANGE:
+                            now = time.time()
+                            f = dist / RANGE          # 0 = at sensor, 1 = at edge
+                            period = 0.15 + f * 0.85
+                            freq = int(1600 - f * 800)
+
+                            if (now - last_beep) >= period:
+                                trigger_beep(duration=0.12, frequency=freq)
+                                last_beep = now
+                                ser.reset_input_buffer()   # drop frames buffered during the beep
+                        # out of range → no beeps, goes quiet
+            else:
+                time.sleep(0.01)
+
+    except KeyboardInterrupt:
+        print("\nShutting down and cleaning up GPIO...")
+
+except Exception as e:
+    print(f"Error: {e}")
+
+finally:
+    print("Cleaning up GPIO and closing serial port...")
     cleanup_gpio()
-    ser.close()
+    try:
+        ser.close()
+    except NameError:
+        pass  # ser was never created if serial.Serial() failed
