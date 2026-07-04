@@ -1,5 +1,5 @@
 """
-bat_deterrent.py
+bat_detection.py
 ================
 
 Integrated wildlife deterrent for the Pi 4.
@@ -10,8 +10,13 @@ Triggers the speaker when BOTH conditions are met at nearly the same time:
   2) The LiDAR reports an object closer than DIST_TRIGGER_CM
      (via TFmini on /dev/serial0)
 
-Prototype note: DIST_TRIGGER_CM is 100 cm here for testing. In the real
-deployment this would be much larger (e.g. 20000 cm ≈ 200 m).
+Bat detection = a >FFT_THRESHOLD peak in the 20-59 kHz band of the PCM stream
+that the Pico is sending over USB (see 260703_sendtopi4.py).
+
+Distance = TFmini-family LiDAR on /dev/serial0.
+
+Prototype note: RANGE_CM is 100 cm here for testing. In the real deployment
+this would be much larger (e.g. 20000 cm ≈ 200 m).
 
 Prereqs on the Pi:
   pip install pyserial numpy
@@ -19,7 +24,7 @@ Prereqs on the Pi:
   # GPIO 18 sysfs access usually requires either sudo or the 'gpio' group.
 
 Run:
-  python3 bat_deterrent.py
+  sudo /home/admin/.venv/bin/python bat_detection.py
 """
 
 import glob
@@ -57,14 +62,25 @@ BAND_LO_HZ = 20_000                # bat-call frequency band
 BAND_HI_HZ = 59_000
 FFT_THRESHOLD = 5000               # bin magnitude threshold — TUNE against room noise
 
-# LiDAR trigger distance (prototype small-scale)
-DIST_TRIGGER_CM = 100              # <-- 1 m for prototype; ~20000 for the real thing
+# Distance zones (match speaker4.py)
+RANGE_CM = 100                     # object closer than this → start beeping (if bat hot)
+SOLID_CM = 15                      # object closer than this → near-solid alarm
 
-# Coincidence & cooldown
-COINCIDENCE_WINDOW_S = 2.0         # bat + close-object must both fire within this window
-BEEP_COOLDOWN_S = 1.0              # min time between deterrent triggers
+# Parking-sensor tone shape (match speaker4.py)
+BEEP_DURATION_S = 0.12             # length of each individual beep
+BEEP_FREQ_NEAR = 1600              # Hz at 0 cm (highest)
+BEEP_FREQ_FAR  = 800               # Hz at RANGE_CM (lowest)
+BEEP_PERIOD_NEAR = 0.15            # gap between beeps at 0 cm (fastest)
+BEEP_PERIOD_FAR  = 1.00            # gap between beeps at RANGE_CM (slowest)
 
-# Speaker (BCM GPIO 18, header pin 12) via sysfs — matches speaker.py
+# Solid-alarm mode (dist < SOLID_CM)
+SOLID_DURATION_S = 0.25
+SOLID_FREQ = 1600
+
+# Bat "recently heard" window — how long a detection stays hot for gating beeps
+COINCIDENCE_WINDOW_S = 2.0
+
+# Speaker (BCM GPIO 18, header pin 12) via sysfs — matches speaker4.py
 SPEAKER_BCM = 18
 
 
@@ -86,8 +102,6 @@ def _sysfs_pin_number(bcm):
 
 SPEAKER_PIN = str(_sysfs_pin_number(SPEAKER_BCM))
 SPEAKER_PATH = f"/sys/class/gpio/gpio{SPEAKER_PIN}"
-DETERRENT_HZ = 2500                # pitch of the deterrent tone
-DETERRENT_DURATION_S = 1.5         # how long each trigger holds the buzzer on
 
 
 # =============================================================================
@@ -97,13 +111,12 @@ DETERRENT_DURATION_S = 1.5         # how long each trigger holds the buzzer on
 state_lock = threading.Lock()
 last_bat_time = 0.0
 last_bat_freq = 0.0
-last_close_time = 0.0
 last_dist_cm = 0
 stop_event = threading.Event()
 
 
 # =============================================================================
-# Speaker (adapted from speaker.py)
+# Speaker (adapted from speaker4.py)
 # =============================================================================
 
 def setup_speaker():
@@ -130,8 +143,8 @@ def cleanup_speaker():
             pass
 
 
-def play_deterrent(duration=DETERRENT_DURATION_S, frequency=DETERRENT_HZ):
-    """Toggle GPIO18 as a square wave to make the buzzer sound."""
+def trigger_beep(duration, frequency):
+    """Toggle the speaker pin as a square wave. Same tone-generation as speaker4.py."""
     period = 1.0 / frequency
     half_period = period / 2.0
     cycles = int(duration * frequency)
@@ -149,7 +162,7 @@ def play_deterrent(duration=DETERRENT_DURATION_S, frequency=DETERRENT_HZ):
 # =============================================================================
 
 def lidar_worker():
-    global last_close_time, last_dist_cm
+    global last_dist_cm
     try:
         ser = serial.Serial(LIDAR_PORT, LIDAR_BAUD, timeout=1)
     except Exception as e:
@@ -170,8 +183,6 @@ def lidar_worker():
             dist = frame[0] + frame[1] * 256
             with state_lock:
                 last_dist_cm = dist
-                if 0 < dist < DIST_TRIGGER_CM:
-                    last_close_time = time.monotonic()
     finally:
         ser.close()
 
@@ -247,8 +258,32 @@ def bat_worker():
 
 
 # =============================================================================
-# Main coincidence + trigger loop
+# Main coincidence + adaptive-beep loop
 # =============================================================================
+
+def compute_beep(dist_cm):
+    """
+    Given a current distance in cm, return (duration_s, frequency_hz, period_s)
+    describing the next beep to play. Returns None if the object is out of range
+    (i.e., no beep at all).
+
+    Mirrors the "parking sensor" behavior from speaker4.py:
+      - dist < SOLID_CM      → hold a near-solid loud tone (period ≈ 0)
+      - SOLID_CM..RANGE_CM   → beeps that get faster + higher-pitched closer in
+      - >= RANGE_CM          → silent
+    """
+    if dist_cm <= 0:
+        return None
+    if dist_cm < SOLID_CM:
+        # Solid alarm: period 0 so the main loop re-fires immediately.
+        return SOLID_DURATION_S, SOLID_FREQ, 0.0
+    if dist_cm < RANGE_CM:
+        f = dist_cm / RANGE_CM  # 0.0 at sensor, 1.0 at edge
+        period = BEEP_PERIOD_NEAR + f * (BEEP_PERIOD_FAR - BEEP_PERIOD_NEAR)
+        freq = int(BEEP_FREQ_NEAR + f * (BEEP_FREQ_FAR - BEEP_FREQ_NEAR))
+        return BEEP_DURATION_S, freq, period
+    return None
+
 
 def main():
     if not setup_speaker():
@@ -259,27 +294,41 @@ def main():
     lidar_thread.start()
     bat_thread.start()
 
-    print(f"[main] armed: bat call + object <{DIST_TRIGGER_CM}cm within "
-          f"{COINCIDENCE_WINDOW_S:.1f}s -> deterrent for {DETERRENT_DURATION_S:.1f}s")
+    print(f"[main] armed: bat call + object <{RANGE_CM}cm -> parking-sensor beeps; "
+          f"<{SOLID_CM}cm -> solid alarm; bat gate = {COINCIDENCE_WINDOW_S:.1f}s")
 
     last_beep = 0.0
     try:
         while True:
-            time.sleep(0.05)
+            time.sleep(0.02)
             now = time.monotonic()
 
             with state_lock:
                 bat_hot = (now - last_bat_time) < COINCIDENCE_WINDOW_S
-                close_hot = (now - last_close_time) < COINCIDENCE_WINDOW_S
                 dist_snap = last_dist_cm
                 freq_snap = last_bat_freq
 
-            if bat_hot and close_hot and (now - last_beep) > BEEP_COOLDOWN_S:
-                print(f"[{time.strftime('%H:%M:%S')}] TRIGGER: "
-                      f"bat ~{freq_snap / 1000:.1f} kHz + dist {dist_snap} cm "
-                      f"-> deterrent")
-                play_deterrent()
-                last_beep = time.monotonic()
+            # Gate 1: no beeps at all unless a bat was recently heard.
+            if not bat_hot:
+                continue
+
+            # Gate 2: distance decides duration/frequency/period (or "silent").
+            beep = compute_beep(dist_snap)
+            if beep is None:
+                continue
+
+            duration, frequency, period = beep
+
+            # Gate 3: don't fire more often than the current period allows.
+            if (now - last_beep) < period:
+                continue
+
+            print(f"[{time.strftime('%H:%M:%S')}] BEEP: "
+                  f"bat ~{freq_snap / 1000:.1f} kHz + dist {dist_snap} cm "
+                  f"-> {frequency} Hz for {duration * 1000:.0f} ms "
+                  f"(next in {period * 1000:.0f} ms)")
+            trigger_beep(duration=duration, frequency=frequency)
+            last_beep = time.monotonic()
     except KeyboardInterrupt:
         print("\n[main] stopping.")
     finally:
